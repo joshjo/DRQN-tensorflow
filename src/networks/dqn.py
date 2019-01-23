@@ -8,8 +8,6 @@ from src.utils import conv2d_layer, fully_connected_layer, huber_loss
 from src.networks.base import  BaseModel
 
 
-
-
 class DQN(BaseModel):
 
     def __init__(self, n_actions, config):
@@ -19,8 +17,8 @@ class DQN(BaseModel):
         self.cnn_format = config.cnn_format
         self.all_tf = not True
 
-
     def train_on_batch_target(self, state, action, reward, state_, terminal, steps):
+        # To keep the values between 0 and 1.
         state_ = state_ / 255.0
         state = state / 255.0
         target_val = self.q_target_out.eval({self.state_target: state_}, session=self.sess)

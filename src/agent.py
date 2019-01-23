@@ -1,6 +1,7 @@
 from src.env_wrapper import GymWrapper, RetroWrapper
 import numpy as np
 
+
 class BaseAgent():
 
     def __init__(self, config):

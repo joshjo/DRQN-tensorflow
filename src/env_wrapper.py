@@ -4,7 +4,6 @@ from src.utils import resize, rgb2gray
 import numpy as np
 
 
-
 class GymWrapper():
 
     def __init__(self, config):

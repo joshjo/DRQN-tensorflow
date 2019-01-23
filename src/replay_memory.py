@@ -108,7 +108,6 @@ class DRQNReplayMemory(ReplayMemory):
         self.count = max(self.count, self.current + 1)
         self.current = (self.current + 1) % self.config.mem_size
 
-
     def getState(self, index):
         a = self.screens[index - (self.config.min_history + self.config.states_to_update + 1): index]
         return a
