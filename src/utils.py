@@ -84,14 +84,14 @@ def stateful_lstm(x, num_layers, lstm_size, state_input, scope_name="lstm"):
         return outputs, state
 
 
-def stateful_gru(x, num_layers, lstm_size, state_input, scope_name="gru"):
+def stateful_gru(x, num_layers, lstm_size, scope_name="gru"):
     with tf.variable_scope(scope_name):
         cell = tf.nn.rnn_cell.GRUCell(lstm_size)
         cell = tf.nn.rnn_cell.MultiRNNCell([cell]*num_layers, state_is_tuple=True)
-        print('======> cell', cell)
-        print('======> x   ', x)
-        print('======> stat', state_input)
-        outputs, state = tf.nn.dynamic_rnn(cell, x, initial_state=state_input)
+        # print('======> cell', cell)
+        # print('======> x   ', x)
+        # print('======> stat', state_input)
+        outputs, state = tf.nn.dynamic_rnn(cell, x, initial_state=cell.zero_state(lstm_size))
         return outputs, state
 
 

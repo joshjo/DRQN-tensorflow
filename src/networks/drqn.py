@@ -34,8 +34,6 @@ class DRQN(BaseModel):
         self.h_state_train = tf.placeholder(tf.float32, [None, self.lstm_size], name="train_h")
         self.lstm_state_train = tf.nn.rnn_cell.LSTMStateTuple(self.c_state_train, self.h_state_train)
 
-
-
         self.c_state_target = tf.placeholder(tf.float32, [None, self.lstm_size], name="target_c")
         self.h_state_target = tf.placeholder(tf.float32, [None, self.lstm_size], name="target_h")
         self.lstm_state_target = tf.nn.rnn_cell.LSTMStateTuple(self.c_state_target, self.h_state_target)
@@ -95,8 +93,6 @@ class DRQN(BaseModel):
         self.q_out = out
         self.q_action = tf.argmax(self.q_out, axis=1)
 
-        self.q_action_2 = tf.argmax(self.q_out, axis=1)
-
     def add_logits_op_target(self):
         if self.cnn_format == "NHWC":
             x = tf.transpose(self.state_target, [0, 2, 3, 1])
@@ -134,7 +130,6 @@ class DRQN(BaseModel):
 
         self.q_target_out = out
         self.q_target_action = tf.argmax(self.q_target_out, axis=1)
-        self.q_target_action_2 = tf.argmax(self.q_target_out, axis=1)
 
     def train_on_batch_target(self, states, action, reward, terminal, steps):
         states = states / 255.0
@@ -168,6 +163,19 @@ class DRQN(BaseModel):
             )
         for i in range(self.min_history, self.min_history + self.states_to_update):
             j = i + 1
+
+            # Double q learning
+            train_val = self.sess.run(
+                self.q_out,
+                {
+                    self.state: states[i],
+                    self.state_target: states[j],
+                    self.c_state_target: lstm_state_target_c,
+                    self.h_state_target: lstm_state_target_h,
+                    self.c_state_train: lstm_state_c,
+                    self.h_state_train: lstm_state_h
+                }
+            )
             target_val, lstm_state_target_c, lstm_state_target_h = self.sess.run(
                 [self.q_target_out, self.state_output_target_c, self.state_output_target_h],
                 {
@@ -176,7 +184,9 @@ class DRQN(BaseModel):
                     self.h_state_target: lstm_state_target_h
                 }
             )
-            max_target = np.max(target_val, axis=1)
+            max_train = np.argmax(train_val, axis=1)
+            max_target = [target_val[i][x] for i, x in enumerate(max_train)]
+
             target = (1. - terminal[i]) * self.gamma * max_target + reward[i]
             _, q_, train_loss_, lstm_state_c, lstm_state_h, merged_imgs= self.sess.run(
                 [self.train_op, self.q_out, self.loss, self.state_output_c, self.state_output_h, self.merged_image_sum],

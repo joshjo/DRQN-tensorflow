@@ -20,6 +20,7 @@ class DRQNAgent(BaseAgent):
         if self.i < self.config.epsilon_decay_episodes:
             self.epsilon -= self.config.epsilon_decay
         if self.i % self.config.train_freq == 0 and self.i > self.config.train_start:
+            print('<<<<<<<<<<< --- >>>>>>>>>>>>')
             states, action, reward, terminal = self.replay_memory.sample_batch()
             q, loss= self.net.train_on_batch_target(states, action, reward, terminal, self.i)
             self.total_q += q
@@ -37,19 +38,19 @@ class DRQNAgent(BaseAgent):
         else:
             q = np.random.rand()
 
-            if q < 0.5:
-                a, self.lstm_state_c, self.lstm_state_h = self.net.sess.run([self.net.q_action, self.net.state_output_c, self.net.state_output_h],{
-                    self.net.state : [[state]],
-                    self.net.c_state_train: self.lstm_state_c,
-                    self.net.h_state_train: self.lstm_state_h
-                })
+            # if q < 0.5:
+            a, self.lstm_state_c, self.lstm_state_h = self.net.sess.run([self.net.q_action, self.net.state_output_c, self.net.state_output_h],{
+                self.net.state : [[state]],
+                self.net.c_state_train: self.lstm_state_c,
+                self.net.h_state_train: self.lstm_state_h
+            })
 
-            else:
-                a, self.lstm_state_c, self.lstm_state_h = self.net.sess.run([self.net.q_action_2, self.net.state_output_c, self.net.state_output_h],{
-                    self.net.state : [[state]],
-                    self.net.c_state_train: self.lstm_state_c,
-                    self.net.h_state_train: self.lstm_state_h
-                })
+            # else:
+            #     a, self.lstm_state_c, self.lstm_state_h = self.net.sess.run([self.net.q_action_2, self.net.state_output_c, self.net.state_output_h],{
+            #         self.net.state : [[state]],
+            #         self.net.c_state_train: self.lstm_state_c,
+            #         self.net.h_state_train: self.lstm_state_h
+            #     })
             return a[0]
 
 
