@@ -30,16 +30,28 @@ class DRQNAgent(BaseAgent):
 
     def policy(self, state):
         self.random = False
-        if np.random.rand() < self.epsilon:
+        r = np.random.rand()
+        if r < self.epsilon:
             self.random = True
             return self.env_wrapper.random_step()
         else:
-            a, self.lstm_state_c, self.lstm_state_h = self.net.sess.run([self.net.q_action, self.net.state_output_c, self.net.state_output_h],{
-                self.net.state : [[state]],
-                self.net.c_state_train: self.lstm_state_c,
-                self.net.h_state_train: self.lstm_state_h
-            })
+            q = np.random.rand()
+
+            if q < 0.5:
+                a, self.lstm_state_c, self.lstm_state_h = self.net.sess.run([self.net.q_action, self.net.state_output_c, self.net.state_output_h],{
+                    self.net.state : [[state]],
+                    self.net.c_state_train: self.lstm_state_c,
+                    self.net.h_state_train: self.lstm_state_h
+                })
+
+            else:
+                a, self.lstm_state_c, self.lstm_state_h = self.net.sess.run([self.net.q_action_2, self.net.state_output_c, self.net.state_output_h],{
+                    self.net.state : [[state]],
+                    self.net.c_state_train: self.lstm_state_c,
+                    self.net.h_state_train: self.lstm_state_h
+                })
             return a[0]
+
 
 
     def train(self, steps):

@@ -4,14 +4,14 @@ import tensorflow as tf
 import shutil
 from functools import reduce
 from tensorflow.python import debug as tf_debug
-from src.utils import conv2d_layer, fully_connected_layer, stateful_lstm, huber_loss
+from src.utils import conv2d_layer, fully_connected_layer, stateful_gru, huber_loss
 from src.networks.base import BaseModel
 
 
-class DRQN(BaseModel):
+class GRU(BaseModel):
 
     def __init__(self, n_actions, config):
-        super(DRQN, self).__init__(config, "drqn")
+        super(GRU, self).__init__(config, "gru")
         self.n_actions = n_actions
         self.cnn_format = config.cnn_format
         self.num_lstm_layers = config.num_lstm_layers
@@ -80,8 +80,10 @@ class DRQN(BaseModel):
         self.image_summary.append(summary)
 
         shape = out.get_shape().as_list()
+        print('PRE out_flat shape', out.shape)
         out_flat = tf.reshape(out, [tf.shape(out)[0], 1, shape[1] * shape[2] * shape[3]])
-        out, state = stateful_lstm(out_flat, self.num_lstm_layers, self.lstm_size, tuple([self.lstm_state_train]),
+        print('PST out_flat shape', out_flat.shape)
+        out, state = stateful_gru(out_flat, self.num_lstm_layers, self.lstm_size, tuple([self.lstm_state_train]),
                                                scope_name="lstm_train")
         self.state_output_c = state[0][0]
         self.state_output_h = state[0][1]
@@ -94,8 +96,6 @@ class DRQN(BaseModel):
 
         self.q_out = out
         self.q_action = tf.argmax(self.q_out, axis=1)
-
-        self.q_action_2 = tf.argmax(self.q_out, axis=1)
 
     def add_logits_op_target(self):
         if self.cnn_format == "NHWC":
@@ -119,7 +119,7 @@ class DRQN(BaseModel):
 
         shape = out.get_shape().as_list()
         out_flat = tf.reshape(out, [tf.shape(out)[0], 1, shape[1] * shape[2] * shape[3]])
-        out, state = stateful_lstm(out_flat, self.num_lstm_layers, self.lstm_size,
+        out, state = stateful_gru(out_flat, self.num_lstm_layers, self.lstm_size,
                                                       tuple([self.lstm_state_target]), scope_name="lstm_target")
         self.state_output_target_c = state[0][0]
         self.state_output_target_h = state[0][1]
@@ -134,7 +134,6 @@ class DRQN(BaseModel):
 
         self.q_target_out = out
         self.q_target_action = tf.argmax(self.q_target_out, axis=1)
-        self.q_target_action_2 = tf.argmax(self.q_target_out, axis=1)
 
     def train_on_batch_target(self, states, action, reward, terminal, steps):
         states = states / 255.0
@@ -199,6 +198,8 @@ class DRQN(BaseModel):
                 self.learning_rate = self.learning_rate_minimum
         self.train_steps += 1
         return q.mean(), loss / (self.states_to_update)
+
+
 
     def add_loss_op_target(self):
         action_one_hot = tf.one_hot(self.action, self.n_actions, 1.0, 0.0, name='action_one_hot')
