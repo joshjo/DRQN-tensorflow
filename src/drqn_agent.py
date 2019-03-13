@@ -20,7 +20,6 @@ class DRQNAgent(BaseAgent):
         if self.i < self.config.epsilon_decay_episodes:
             self.epsilon -= self.config.epsilon_decay
         if self.i % self.config.train_freq == 0 and self.i > self.config.train_start:
-            print('<<<<<<<<<<< --- >>>>>>>>>>>>')
             states, action, reward, terminal = self.replay_memory.sample_batch()
             q, loss= self.net.train_on_batch_target(states, action, reward, terminal, self.i)
             self.total_q += q

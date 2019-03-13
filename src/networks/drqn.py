@@ -169,9 +169,9 @@ class DRQN(BaseModel):
                 self.q_out,
                 {
                     self.state: states[i],
-                    self.state_target: states[j],
-                    self.c_state_target: lstm_state_target_c,
-                    self.h_state_target: lstm_state_target_h,
+                    # self.state_target: states[j],
+                    # self.c_state_target: lstm_state_target_c,
+                    # self.h_state_target: lstm_state_target_h,
                     self.c_state_train: lstm_state_c,
                     self.h_state_train: lstm_state_h
                 }
@@ -185,7 +185,14 @@ class DRQN(BaseModel):
                 }
             )
             max_train = np.argmax(train_val, axis=1)
+            max_tmp = np.max(target_val, axis=1)
             max_target = [target_val[i][x] for i, x in enumerate(max_train)]
+
+            # print('\nj', j)
+            # diffs = sum([1 for i, val in enumerate(max_tmp) if max_target[i] != val])
+
+            # print('diffs %d/%d' % (diffs, len(max_target)))
+            # print(list(zip(train_val, target_val)))
 
             target = (1. - terminal[i]) * self.gamma * max_target + reward[i]
             _, q_, train_loss_, lstm_state_c, lstm_state_h, merged_imgs= self.sess.run(
