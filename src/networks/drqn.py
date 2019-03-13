@@ -81,7 +81,6 @@ class DRQN(BaseModel):
         out_flat = tf.reshape(out, [tf.shape(out)[0], 1, shape[1] * shape[2] * shape[3]])
         out, state = stateful_lstm(out_flat, self.num_lstm_layers, self.lstm_size, tuple([self.lstm_state_train]),
                                                scope_name="lstm_train")
-        # self.tmp = state
         self.state_output_c = state[0][0]
         self.state_output_h = state[0][1]
         shape = out.get_shape().as_list()
@@ -164,19 +163,6 @@ class DRQN(BaseModel):
             )
         for i in range(self.min_history, self.min_history + self.states_to_update):
             j = i + 1
-
-            # Double q learning
-            train_val = self.sess.run(
-                self.q_out,
-                {
-                    self.state: states[i],
-                    # self.state_target: states[j],
-                    # self.c_state_target: lstm_state_target_c,
-                    # self.h_state_target: lstm_state_target_h,
-                    self.c_state_train: lstm_state_c,
-                    self.h_state_train: lstm_state_h
-                }
-            )
             target_val, lstm_state_target_c, lstm_state_target_h = self.sess.run(
                 [self.q_target_out, self.state_output_target_c, self.state_output_target_h],
                 {
@@ -185,16 +171,7 @@ class DRQN(BaseModel):
                     self.h_state_target: lstm_state_target_h
                 }
             )
-            max_train = np.argmax(train_val, axis=1)
-            max_tmp = np.max(target_val, axis=1)
-            max_target = [target_val[i][x] for i, x in enumerate(max_train)]
-
-            # print('\nj', j)
-            # diffs = sum([1 for i, val in enumerate(max_tmp) if max_target[i] != val])
-
-            # print('diffs %d/%d' % (diffs, len(max_target)))
-            # print(list(zip(train_val, target_val)))
-
+            max_target = np.max(target_val, axis=1)
             target = (1. - terminal[i]) * self.gamma * max_target + reward[i]
             _, q_, train_loss_, lstm_state_c, lstm_state_h, merged_imgs= self.sess.run(
                 [self.train_op, self.q_out, self.loss, self.state_output_c, self.state_output_h, self.merged_image_sum],
@@ -217,6 +194,8 @@ class DRQN(BaseModel):
                 self.learning_rate = self.learning_rate_minimum
         self.train_steps += 1
         return q.mean(), loss / (self.states_to_update)
+
+
 
     def add_loss_op_target(self):
         action_one_hot = tf.one_hot(self.action, self.n_actions, 1.0, 0.0, name='action_one_hot')

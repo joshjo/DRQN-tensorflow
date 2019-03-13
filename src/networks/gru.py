@@ -34,7 +34,7 @@ class GRU(BaseModel):
         # create placeholder to fill in lstm state
         # self.c_state_train = tf.placeholder(tf.float32, [None, self.lstm_size], name="train_c")
         # self.h_state_train = tf.placeholder(tf.float32, [None, self.lstm_size], name="train_h")
-        self.gru_state_train = tf.placeholder(tf.float32, [1, self.gru_size], name="train_gru")
+        self.gru_state_train = tf.placeholder(tf.float32, [None, self.gru_size], name="train_gru")
         # self.lstm_state_train = tf.nn.rnn_cell.LSTMStateTuple(self.c_state_train, self.h_state_train)
 
 
@@ -42,9 +42,9 @@ class GRU(BaseModel):
         # self.c_state_target = tf.placeholder(tf.float32, [None, self.lstm_size], name="target_c")
         # self.h_state_target = tf.placeholder(tf.float32, [None, self.lstm_size], name="target_h")
         # self.lstm_state_target = tf.nn.rnn_cell.LSTMStateTuple(self.c_state_target, self.h_state_target)
-        self.gru_state_target = tf.placeholder(tf.float32, [None, self.lstm_size], name="train_target")
+        self.gru_state_target = tf.placeholder(tf.float32, [None, self.gru_size], name="train_target")
         # initial zero state to be used when starting episode
-        self.initial_zero_state_batch = np.zeros((self.batch_size, self.lstm_size))
+        self.initial_zero_state_batch = np.zeros((1, self.gru_size))
         self.initial_zero_state_single = np.zeros((1, self.gru_size))
 
         self.initial_zero_complete = np.zeros((self.num_lstm_layers, 2, self.batch_size, self.lstm_size))
@@ -82,11 +82,13 @@ class GRU(BaseModel):
         self.w["bc3"] = b
         self.image_summary.append(summary)
 
+        print('out', out)
+
         shape = out.get_shape().as_list()
         # print('PRE out_flat shape', out.shape)
         out_flat = tf.reshape(out, [tf.shape(out)[0], 1, shape[1] * shape[2] * shape[3]])
         # print('PST out_flat shape', out_flat.shape)
-        out, state = stateful_gru(out_flat, self.num_lstm_layers, self.lstm_size, scope_name="gru_train")
+        out, state = stateful_gru(out_flat, self.num_lstm_layers, self.gru_size, scope_name="gru_train")
         self.tmp = state
         self.state_output = state[0]
         # self.state_output_h = state[0][1]
@@ -122,7 +124,7 @@ class GRU(BaseModel):
 
         shape = out.get_shape().as_list()
         out_flat = tf.reshape(out, [tf.shape(out)[0], 1, shape[1] * shape[2] * shape[3]])
-        out, state = stateful_gru(out_flat, self.num_lstm_layers, self.lstm_size, scope_name="gru_target")
+        out, state = stateful_gru(out_flat, self.num_lstm_layers, self.gru_size, scope_name="gru_target")
         self.state_output_target = state[0]
         # self.state_output_target_h = state[0][1]
         shape = out.get_shape().as_list()
@@ -179,6 +181,7 @@ class GRU(BaseModel):
                 [self.train_op, self.q_out, self.loss, self.state_output_target, self.merged_image_sum],
                 feed_dict={
                     self.state: states[i],
+                    self.state_target: states[j],
                     self.gru_state_train: gru_state,
                     self.action: action[i],
                     self.target_val: target,
