@@ -81,6 +81,7 @@ class DRQN(BaseModel):
         out_flat = tf.reshape(out, [tf.shape(out)[0], 1, shape[1] * shape[2] * shape[3]])
         out, state = stateful_lstm(out_flat, self.num_lstm_layers, self.lstm_size, tuple([self.lstm_state_train]),
                                                scope_name="lstm_train")
+        # self.tmp = state
         self.state_output_c = state[0][0]
         self.state_output_h = state[0][1]
         shape = out.get_shape().as_list()

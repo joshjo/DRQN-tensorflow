@@ -36,13 +36,13 @@ class GRUAgent(BaseAgent):
     def policy(self, state):
         self.random = False
         if np.random.rand() < self.epsilon:
+        # if False:
             self.random = True
             return self.env_wrapper.random_step()
         else:
-            a, self.lstm_state_c, self.lstm_state_h = self.net.sess.run([self.net.q_action, self.net.state_output_c, self.net.state_output_h],{
+            tmp, a, self.state_output = self.net.sess.run([self.net.tmp, self.net.q_action, self.net.state_output],{
                 self.net.state : [[state]],
-                self.net.c_state_train: self.lstm_state_c,
-                self.net.h_state_train: self.lstm_state_h
+                self.net.gru_state_train: self.gru_state,
             })
             return a[0]
 
@@ -55,17 +55,16 @@ class GRUAgent(BaseAgent):
         ep_rewards, actions = [], []
         t = 0
         self.screen = self.env_wrapper.screen
-        self.lstm_state_c, self.lstm_state_h = self.net.initial_zero_state_single, self.net.initial_zero_state_single
+        self.gru_state = self.net.initial_zero_state_single
 
         for self.i in tqdm(range(self.i, steps)):
             state = self.screen/255
             action = self.policy(state)
             self.env_wrapper.act(action)
             if self.random:
-                self.lstm_state_c, self.lstm_state_h = self.net.sess.run([self.net.state_output_c, self.net.state_output_h], {
+                self.gru_state = self.net.sess.run(self.net.state_output, {
                     self.net.state: [[state]],
-                    self.net.c_state_train : self.lstm_state_c,
-                    self.net.h_state_train: self.lstm_state_h
+                    self.net.gru_state_train : self.gru_state,
                 })
             self.observe(t)
             if self.env_wrapper.terminal:
@@ -75,7 +74,7 @@ class GRUAgent(BaseAgent):
                 num_game += 1
                 ep_rewards.append(ep_reward)
                 ep_reward = 0.
-                self.lstm_state_c, self.lstm_state_h = self.net.initial_zero_state_single, self.net.initial_zero_state_single
+                self.gru_state = self.net.initial_zero_state_single
             else:
                 ep_reward += self.env_wrapper.reward
                 t += 1
