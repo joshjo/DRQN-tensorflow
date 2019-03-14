@@ -1,7 +1,7 @@
 # DRQN-tensorflow
 Deep Recurrent Q Learning using Tensorflow, openai/gym and openai/retro
 
-This repository contains code for training a DQN or a DRQN on [openai/gym](https://github.com/openai/gym) Atari and [openai/retro](https://github.com/openai/retro) environments. 
+This repository contains code for training a DQN or a DRQN on [openai/gym](https://github.com/openai/gym) Atari and [openai/retro](https://github.com/openai/retro) environments.
 
 Note that training on Retro environments is completely experimental as of now and these environments have to
 be wrapped to reduce the action space to a more sensible subspace of all
@@ -16,7 +16,7 @@ the SEGA Sonic environments.
 ### Running
 You can start training by:
 ```
-python main.py --gym=gym --steps=10000000 --train=True --network_type=dqn --env_name=Breakout-v0
+python main.py --gym=gym --steps=10000000 --train=True --network_type=gru --env_name=Breakout-v0
 ```
 This will train a DQN on Atari Breakout for 10 mio observations. For more on command line parameters please see
 ```
@@ -27,7 +27,7 @@ Visualizing the training process can be done using tensorboard by:
 tensorboard --logdir=out
 ```
 
-### Result after training for 10mio steps (approx. 11 hours on GTX 1080 Ti)
+### Result after training for 10mio steps (approx. 60 hours on GTX 750 Ti)
 ![Alt Text](https://github.com/marctuscher/dqn/blob/master/assets/breakout_10mio.gif)
 ### References
 1. [DQN-tensorflow](https://github.com/devsisters/DQN-tensorflow)
