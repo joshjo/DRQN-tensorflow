@@ -139,3 +139,58 @@ class DRQNReplayMemory(ReplayMemory):
 
 
         return self.states, self.actions_out, self.rewards_out, self.terminals_out
+
+
+class GRUReplayMemory(ReplayMemory):
+
+    def __init__(self, config):
+        super(GRUReplayMemory, self).__init__(config)
+
+        self.timesteps = np.empty((self.config.mem_size), dtype=np.int32)
+        self.states = np.empty((self.config.batch_size, self.config.min_history + self.config.states_to_update + 1, self.config.screen_height, self.config.screen_width), dtype=np.uint8)
+        self.actions_out = np.empty((self.config.batch_size, self.config.min_history + self.config.states_to_update +1))
+        self.rewards_out = np.empty((self.config.batch_size, self.config.min_history + self.config.states_to_update +1))
+        self.terminals_out = np.empty((self.config.batch_size, self.config.min_history + self.config.states_to_update +1))
+
+    def add(self, screen, reward, action, terminal, t):
+        assert screen.shape == (self.config.screen_height, self.config.screen_width)
+
+        self.actions[self.current] = action
+        self.rewards[self.current] = reward
+        self.screens[self.current] = screen
+        self.timesteps[self.current] = t
+        self.terminals[self.current] = float(terminal)
+        self.count = max(self.count, self.current + 1)
+        self.current = (self.current + 1) % self.config.mem_size
+
+    def getState(self, index):
+        a = self.screens[index - (self.config.min_history + self.config.states_to_update + 1): index]
+        return a
+
+    def get_scalars(self, index):
+        t = self.terminals[index - (self.config.min_history + self.config.states_to_update + 1): index]
+        a = self.actions[index - (self.config.min_history + self.config.states_to_update + 1): index]
+        r = self.rewards[index - (self.config.min_history + self.config.states_to_update + 1): index]
+        return a, t, r
+
+    def sample_batch(self):
+        assert self.count > self.config.min_history + self.config.states_to_update
+
+        indices = []
+        while len(indices) < self.config.batch_size:
+
+            while True:
+                index = random.randint(self.config.min_history, self.count-1)
+                if index >= self.current and index - self.config.min_history < self.current:
+                    continue
+                if index < self.config.min_history + self.config.states_to_update + 1:
+                    continue
+                if self.timesteps[index] < self.config.min_history + self.config.states_to_update:
+                    continue
+                break
+            self.states[len(indices)] = self.getState(index)
+            self.actions_out[len(indices)], self.terminals_out[len(indices)], self.rewards_out[len(indices)] = self.get_scalars(index)
+            indices.append(index)
+
+
+        return self.states, self.actions_out, self.rewards_out, self.terminals_out

@@ -2,6 +2,8 @@ from scipy.misc import imresize as resize
 import json
 import numpy as np
 import tensorflow as tf
+from tensorflow.contrib import grid_rnn
+from tensorflow.contrib.legacy_seq2seq.python.ops import seq2seq
 
 
 def rgb2gray(screen):
@@ -75,11 +77,33 @@ def fully_connected_layer(x, output_dim, scope_name="fully", initializer=tf.rand
 
         return w, b, out
 
+
+# def loop(prev, _):
+#     prev = tf.nn.xw_plus_b(prev, softmax_w, softmax_b)
+#     prev_symbol = tf.stop_gradient(tf.argmax(prev, 1))
+#     return tf.nn.embedding_lookup(embedding, prev_symbol)
+
+
 def stateful_lstm(x, num_layers, lstm_size, state_input, scope_name="lstm"):
     with tf.variable_scope(scope_name):
+        # cell = grid_rnn.Grid2LSTMCell(lstm_size, state_is_tuple=True, use_peepholes=True, forget_bias=1.0)
         cell = tf.nn.rnn_cell.LSTMCell(lstm_size, state_is_tuple=True)
         cell = tf.nn.rnn_cell.MultiRNNCell([cell]*num_layers, state_is_tuple=True)
+        # print('======> cell', cell)
+        # print('======> x   ', x)
+        # print('======> si', state_input)
+
         outputs, state = tf.nn.dynamic_rnn(cell, x, initial_state=state_input)
+        # outputs, state = seq2seq.rnn_decoder(
+        #     x, state_input, cell, loop_function=None, scope='rnnlm')
+        return outputs, state
+
+
+def stateful_gru(x, num_layers, lstm_size, scope_name="gru"):
+    with tf.variable_scope(scope_name):
+        cell = tf.nn.rnn_cell.GRUCell(64)
+        cell = tf.nn.rnn_cell.MultiRNNCell([cell]*num_layers)
+        outputs, state = tf.nn.dynamic_rnn(cell, x, dtype=tf.float32)
         return outputs, state
 
 

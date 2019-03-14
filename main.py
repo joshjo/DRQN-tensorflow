@@ -1,5 +1,6 @@
 from src.dqn_agent import DQNAgent
 from src.drqn_agent import DRQNAgent
+from src.gru_agent import GRUAgent
 from src.config import RetroConfig, GymConfig
 import sys
 
@@ -8,8 +9,10 @@ import argparse
 class Main():
 
     def __init__(self, net_type, conf):
-        if net_type == "drqn":
+        if net_type == 'drqn':
             self.agent = DRQNAgent(conf)
+        elif net_type == 'gru':
+            self.agent = GRUAgent(conf)
         else:
             self.agent = DQNAgent(conf)
 

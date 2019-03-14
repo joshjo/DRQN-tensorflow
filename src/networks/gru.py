@@ -4,18 +4,19 @@ import tensorflow as tf
 import shutil
 from functools import reduce
 from tensorflow.python import debug as tf_debug
-from src.utils import conv2d_layer, fully_connected_layer, stateful_lstm, huber_loss
+from src.utils import conv2d_layer, fully_connected_layer, stateful_gru, huber_loss
 from src.networks.base import BaseModel
 
 
-class DRQN(BaseModel):
+class GRU(BaseModel):
 
     def __init__(self, n_actions, config):
-        super(DRQN, self).__init__(config, "drqn")
+        super(GRU, self).__init__(config, "gru")
         self.n_actions = n_actions
         self.cnn_format = config.cnn_format
         self.num_lstm_layers = config.num_lstm_layers
         self.lstm_size = config.lstm_size
+        self.gru_size = config.gru_size
         self.min_history = config.min_history
         self.states_to_update = config.states_to_update
 
@@ -29,18 +30,22 @@ class DRQN(BaseModel):
         self.state_target = tf.placeholder(tf.float32,
                                            shape=[None, 1, self.screen_height, self.screen_width],
                                            name="input_target")
+
         # create placeholder to fill in lstm state
-        self.c_state_train = tf.placeholder(tf.float32, [None, self.lstm_size], name="train_c")
-        self.h_state_train = tf.placeholder(tf.float32, [None, self.lstm_size], name="train_h")
-        self.lstm_state_train = tf.nn.rnn_cell.LSTMStateTuple(self.c_state_train, self.h_state_train)
+        # self.c_state_train = tf.placeholder(tf.float32, [None, self.lstm_size], name="train_c")
+        # self.h_state_train = tf.placeholder(tf.float32, [None, self.lstm_size], name="train_h")
+        self.gru_state_train = tf.placeholder(tf.float32, [None, self.gru_size], name="train_gru")
+        # self.lstm_state_train = tf.nn.rnn_cell.LSTMStateTuple(self.c_state_train, self.h_state_train)
 
-        self.c_state_target = tf.placeholder(tf.float32, [None, self.lstm_size], name="target_c")
-        self.h_state_target = tf.placeholder(tf.float32, [None, self.lstm_size], name="target_h")
-        self.lstm_state_target = tf.nn.rnn_cell.LSTMStateTuple(self.c_state_target, self.h_state_target)
 
+
+        # self.c_state_target = tf.placeholder(tf.float32, [None, self.lstm_size], name="target_c")
+        # self.h_state_target = tf.placeholder(tf.float32, [None, self.lstm_size], name="target_h")
+        # self.lstm_state_target = tf.nn.rnn_cell.LSTMStateTuple(self.c_state_target, self.h_state_target)
+        self.gru_state_target = tf.placeholder(tf.float32, [None, self.gru_size], name="train_target")
         # initial zero state to be used when starting episode
-        self.initial_zero_state_batch = np.zeros((self.batch_size, self.lstm_size))
-        self.initial_zero_state_single = np.zeros((1, self.lstm_size))
+        self.initial_zero_state_batch = np.zeros((1, self.gru_size))
+        self.initial_zero_state_single = np.zeros((1, self.gru_size))
 
         self.initial_zero_complete = np.zeros((self.num_lstm_layers, 2, self.batch_size, self.lstm_size))
 
@@ -77,12 +82,16 @@ class DRQN(BaseModel):
         self.w["bc3"] = b
         self.image_summary.append(summary)
 
+        print('out', out)
+
         shape = out.get_shape().as_list()
+        # print('PRE out_flat shape', out.shape)
         out_flat = tf.reshape(out, [tf.shape(out)[0], 1, shape[1] * shape[2] * shape[3]])
-        out, state = stateful_lstm(out_flat, self.num_lstm_layers, self.lstm_size, tuple([self.lstm_state_train]),
-                                               scope_name="lstm_train")
-        self.state_output_c = state[0][0]
-        self.state_output_h = state[0][1]
+        # print('PST out_flat shape', out_flat.shape)
+        out, state = stateful_gru(out_flat, self.num_lstm_layers, self.gru_size, scope_name="gru_train")
+        self.tmp = state
+        self.state_output = state[0]
+        # self.state_output_h = state[0][1]
         shape = out.get_shape().as_list()
         out = tf.reshape(out, [tf.shape(out)[0], shape[2]])
         w, b, out = fully_connected_layer(out, self.n_actions, scope_name="out_train", activation=None)
@@ -115,10 +124,9 @@ class DRQN(BaseModel):
 
         shape = out.get_shape().as_list()
         out_flat = tf.reshape(out, [tf.shape(out)[0], 1, shape[1] * shape[2] * shape[3]])
-        out, state = stateful_lstm(out_flat, self.num_lstm_layers, self.lstm_size,
-                                                      tuple([self.lstm_state_target]), scope_name="lstm_target")
-        self.state_output_target_c = state[0][0]
-        self.state_output_target_h = state[0][1]
+        out, state = stateful_gru(out_flat, self.num_lstm_layers, self.gru_size, scope_name="gru_target")
+        self.state_output_target = state[0]
+        # self.state_output_target_h = state[0][1]
         shape = out.get_shape().as_list()
 
         out = tf.reshape(out, [tf.shape(out)[0], shape[2]])
@@ -139,46 +147,42 @@ class DRQN(BaseModel):
         reward = np.transpose(reward, [1, 0])
         terminal = np.transpose(terminal, [1, 0])
         states = np.reshape(states, [states.shape[0], states.shape[1], 1, states.shape[2], states.shape[3]])
-        lstm_state_c, lstm_state_h = self.initial_zero_state_batch, self.initial_zero_state_batch
-        lstm_state_target_c, lstm_state_target_h = self.sess.run(
-            [self.state_output_target_c, self.state_output_target_h],
+        gru_state = self.initial_zero_state_batch
+        gru_state_target = self.sess.run(
+            self.gru_state_target,
             {
                 self.state_target: states[0],
-                self.c_state_target: self.initial_zero_state_batch,
-                self.h_state_target: self.initial_zero_state_batch
+                self.gru_state_target: self.initial_zero_state_batch,
             }
         )
         for i in range(self.min_history):
             j = i + 1
-            lstm_state_c, lstm_state_h, lstm_state_target_c, lstm_state_target_h = self.sess.run(
-                [self.state_output_c, self.state_output_h, self.state_output_target_c, self.state_output_target_h],
+            gru_state, gru_state_target = self.sess.run(
+                [self.state_output, self.state_output_target],
                 {
                     self.state: states[i],
                     self.state_target: states[j],
-                    self.c_state_target: lstm_state_target_c,
-                    self.h_state_target: lstm_state_target_h,
-                    self.c_state_train: lstm_state_c,
-                    self.h_state_train: lstm_state_h
+                    self.gru_state_target: gru_state_target,
+                    self.gru_state_train: gru_state,
                 }
             )
         for i in range(self.min_history, self.min_history + self.states_to_update):
             j = i + 1
-            target_val, lstm_state_target_c, lstm_state_target_h = self.sess.run(
-                [self.q_target_out, self.state_output_target_c, self.state_output_target_h],
+            target_val, gru_state_target = self.sess.run(
+                [self.q_target_out, self.state_output_target],
                 {
                     self.state_target: states[j],
-                    self.c_state_target: lstm_state_target_c,
-                    self.h_state_target: lstm_state_target_h
+                    self.gru_state_target: gru_state_target,
                 }
             )
             max_target = np.max(target_val, axis=1)
             target = (1. - terminal[i]) * self.gamma * max_target + reward[i]
-            _, q_, train_loss_, lstm_state_c, lstm_state_h, merged_imgs= self.sess.run(
-                [self.train_op, self.q_out, self.loss, self.state_output_c, self.state_output_h, self.merged_image_sum],
+            _, q_, train_loss_, gru_state, merged_imgs= self.sess.run(
+                [self.train_op, self.q_out, self.loss, self.state_output_target, self.merged_image_sum],
                 feed_dict={
                     self.state: states[i],
-                    self.c_state_train: lstm_state_c,
-                    self.h_state_train: lstm_state_h,
+                    self.state_target: states[j],
+                    self.gru_state_train: gru_state,
                     self.action: action[i],
                     self.target_val: target,
                     self.lr: self.learning_rate

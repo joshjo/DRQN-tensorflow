@@ -1,84 +1,80 @@
 from src.agent import BaseAgent
-from src.history import History
-from src.replay_memory import DQNReplayMemory
-from src.networks.dqn import DQN
+from src.replay_memory import (
+    DRQNReplayMemory,
+    GRUReplayMemory,
+)
+from src.networks.drqn import DRQN
+from src.networks.gru import GRU
 import numpy as np
 from tqdm import tqdm
 
 
-class DQNAgent(BaseAgent):
+class GRUAgent(BaseAgent):
 
     def __init__(self, config):
-        super(DQNAgent, self).__init__(config)
-        self.history = History(config)
-        self.replay_memory = DQNReplayMemory(config)
-        self.net = DQN(self.env_wrapper.action_space.n, config)
+        super(GRUAgent, self).__init__(config)
+        self.replay_memory = GRUReplayMemory(config)
+        self.net = GRU(self.env_wrapper.action_space.n, config)
         self.net.build()
         self.net.add_summary(["average_reward", "average_loss", "average_q", "ep_max_reward", "ep_min_reward", "ep_num_game", "learning_rate"], ["ep_rewards", "ep_actions"])
 
-    def observe(self):
-        """
-
-        :return:
-        """
+    def observe(self, t):
         reward = max(self.min_reward, min(self.max_reward, self.env_wrapper.reward))
-        screen = self.env_wrapper.screen
-        self.history.add(screen)
-        self.replay_memory.add(screen, reward, self.env_wrapper.action, self.env_wrapper.terminal)
+        self.screen = self.env_wrapper.screen
+        self.replay_memory.add(self.screen, reward, self.env_wrapper.action, self.env_wrapper.terminal, t)
         if self.i < self.config.epsilon_decay_episodes:
             self.epsilon -= self.config.epsilon_decay
         if self.i % self.config.train_freq == 0 and self.i > self.config.train_start:
-            state, action, reward, state_, terminal = self.replay_memory.sample_batch()
-            q, loss= self.net.train_on_batch_target(state, action, reward, state_, terminal, self.i)
+            states, action, reward, terminal = self.replay_memory.sample_batch()
+            q, loss= self.net.train_on_batch_target(states, action, reward, terminal, self.i)
             self.total_q += q
             self.total_loss += loss
             self.update_count += 1
         if self.i % self.config.update_freq == 0:
             self.net.update_target()
 
-    def policy(self):
-        """
-        q_action: is a tensorflow function which return the maximum value
-        """
-
-        random = np.random.rand()
-        if random < self.epsilon:
+    def policy(self, state):
+        self.random = False
+        if np.random.rand() < self.epsilon:
+        # if False:
+            self.random = True
             return self.env_wrapper.random_step()
         else:
-            state = self.history.get()/255.0
-            a = self.net.q_action.eval({
-                self.net.state : [state]
-            }, session=self.net.sess)
+            tmp, a, self.state_output = self.net.sess.run([self.net.tmp, self.net.q_action, self.net.state_output],{
+                self.net.state : [[state]],
+                self.net.gru_state_train: self.gru_state,
+            })
             return a[0]
 
 
     def train(self, steps):
-        """
-        ep_actions: Number of actions.
-        ep_num_games: Number of tries.
-
-        :param steps:
-        :return:
-        """
         render = False
         self.env_wrapper.new_random_game()
         num_game, self.update_count, ep_reward = 0,0,0.
         total_reward, self.total_loss, self.total_q = 0.,0.,0.
         ep_rewards, actions = [], []
         t = 0
+        self.screen = self.env_wrapper.screen
+        self.gru_state = self.net.initial_zero_state_single
 
-        for _ in range(self.config.history_len):
-            self.history.add(self.env_wrapper.screen)
         for self.i in tqdm(range(self.i, steps)):
-            action = self.policy()
+            state = self.screen/255
+            action = self.policy(state)
             self.env_wrapper.act(action)
-            self.observe()
+            if self.random:
+                self.gru_state = self.net.sess.run(self.net.state_output, {
+                    self.net.state: [[state]],
+                    self.net.gru_state_train : self.gru_state,
+                })
+            self.observe(t)
             if self.env_wrapper.terminal:
                 t = 0
                 self.env_wrapper.new_random_game()
+                self.screen = self.env_wrapper.screen
                 num_game += 1
                 ep_rewards.append(ep_reward)
                 ep_reward = 0.
+                self.gru_state = self.net.initial_zero_state_single
             else:
                 ep_reward += self.env_wrapper.reward
                 t += 1
@@ -86,7 +82,7 @@ class DQNAgent(BaseAgent):
             total_reward += self.env_wrapper.reward
 
             if self.i >= self.config.train_start:
-                if self.i % self.config.test_step == self.config.test_step - 1:
+                if self.i % self.config.test_step == self.config.test_step -1:
                     avg_reward = total_reward / self.config.test_step
                     avg_loss = self.total_loss / self.update_count
                     avg_q = self.total_q / self.update_count
@@ -135,17 +131,17 @@ class DQNAgent(BaseAgent):
     def play(self, episodes, net_path):
         self.net.restore_session(path=net_path)
         self.env_wrapper.new_game()
+        self.lstm_state_c, self.lstm_state_h = self.net.initial_zero_state_single, self.net.initial_zero_state_single
         i = 0
-        for _ in range(self.config.history_len):
-            self.history.add(self.env_wrapper.screen)
         episode_steps = 0
         while i < episodes:
-            a = self.net.q_action.eval({
-                self.net.state : [self.history.get()/255.0]
-            }, session=self.net.sess)
+            a, self.lstm_state_c, self.lstm_state_h = self.net.sess.run([self.net.q_action, self.net.state_output_c, self.net.state_output_h],{
+                self.net.state : [[self.env_wrapper.screen]],
+                self.net.c_state_train: self.lstm_state_c,
+                self.net.h_state_train: self.lstm_state_h
+            })
             action = a[0]
             self.env_wrapper.act_play(action)
-            self.history.add(self.env_wrapper.screen)
             episode_steps += 1
             if episode_steps > self.config.max_steps:
                 self.env_wrapper.terminal = True
@@ -153,6 +149,4 @@ class DQNAgent(BaseAgent):
                 episode_steps = 0
                 i += 1
                 self.env_wrapper.new_play_game()
-                for _ in range(self.config.history_len):
-                    screen = self.env_wrapper.screen
-                    self.history.add(screen)
+                self.lstm_state_c, self.lstm_state_h = self.net.initial_zero_state_single, self.net.initial_zero_state_single

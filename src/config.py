@@ -39,6 +39,8 @@ class Config(object):
     min_history = 4
     states_to_update = 4
 
+    gru_size = 64
+
     if get_available_gpus():
         cnn_format = "NCHW"
     else:
